@@ -29,10 +29,8 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 
 def check_password(password: str) -> None:
-    # Main password is admin123. Also accept legacy change-me so older start_site.bat sessions do not block you.
-    valid_passwords = {ADMIN_PASSWORD, "admin123", "change-me"}
-    if password not in valid_passwords:
-        raise HTTPException(status_code=401, detail="Incorrect admin password. Use admin123 unless you changed RACING_ADMIN_PASSWORD.")
+    if password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Incorrect admin password")
 
 
 @app.get("/", response_class=HTMLResponse)
