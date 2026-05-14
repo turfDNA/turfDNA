@@ -1,0 +1,60 @@
+{
+  "latest_run": {
+    "id": 3,
+    "run_started_at": "2026-05-14T14:32:02+01:00",
+    "run_finished_at": "2026-05-14T14:33:14+01:00",
+    "status": "success",
+    "message": "Daily update completed",
+    "results_files": 0,
+    "racecard_files": 0,
+    "result_rows": 0,
+    "racecard_rows": 0,
+    "races_found": 52,
+    "runners_found": 560,
+    "suggested_fix": null
+  },
+  "imported_totals": [
+    {
+      "file_type": "daily_racecards",
+      "files": 1,
+      "rows": 562
+    },
+    {
+      "file_type": "daily_results",
+      "files": 1,
+      "rows": 918
+    },
+    {
+      "file_type": "historical_results",
+      "files": 1,
+      "rows": 167949
+    }
+  ],
+  "database_totals": {
+    "main_result_runners": 168867,
+    "main_result_races": 17384,
+    "raw_result_rows": 168867,
+    "racecard_rows": 562,
+    "horse_profiles": 39689
+  },
+  "current_run": {
+    "run_started_at": "2026-05-14T14:32:02+01:00",
+    "status": "success",
+    "database": "C:\\Users\\LiamDoherty\\B-First Fire Safety Dropbox\\8. Horse Project\\6.1 website\\13.1\\database\\racing.db",
+    "results_folder": "C:\\Users\\LiamDoherty\\B-First Fire Safety Dropbox\\8. Horse Project\\6.1 website\\13.1\\data_inbox\\daily_results",
+    "racecards_folder": "C:\\Users\\LiamDoherty\\B-First Fire Safety Dropbox\\8. Horse Project\\6.1 website\\13.1\\data_inbox\\daily_racecards",
+    "run_finished_at": "2026-05-14T14:33:14+01:00",
+    "message": "Daily update completed",
+    "results_files_imported": 0,
+    "racecard_files_imported": 0,
+    "result_rows_imported": 0,
+    "racecard_rows_imported": 0,
+    "races_in_database": 52,
+    "active_runners_in_database": 560,
+    "total_result_runners_in_main_database": 168867,
+    "total_result_races_in_main_database": 17384,
+    "latest_result_date_in_main_database": "2026-05-12",
+    "horse_profiles_rebuilt": 39689
+  },
+  "important_note": "Daily results are merged into result_runners/races, the same main historical database used by profiles and results pages."
+}

@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Horse Intelligence Profile</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    :root{
+      --hp-bg:#07111f;
+      --hp-panel:#101b2e;
+      --hp-panel2:#14223a;
+      --hp-line:rgba(148,163,184,.18);
+      --hp-text:#f8fafc;
+      --hp-muted:#9fb1c8;
+      --hp-accent:#5eead4;
+      --hp-green:#22c55e;
+      --hp-amber:#f59e0b;
+      --hp-red:#ef4444;
+      --hp-blue:#38bdf8;
+    }
+    body{
+      background:
+        radial-gradient(circle at top left, rgba(20,184,166,.10), transparent 30%),
+        radial-gradient(circle at top right, rgba(59,130,246,.08), transparent 32%),
+        #07111f;
+    }
+    .profile-page{
+      max-width:1280px;
+      margin:0 auto;
+      padding:26px 18px 80px;
+    }
+    .backlink{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      color:var(--hp-accent);
+      text-decoration:none;
+      font-weight:900;
+      margin-bottom:18px;
+    }
+    .horse-hero{
+      display:grid;
+      grid-template-columns:1fr 340px;
+      gap:18px;
+      align-items:stretch;
+      margin-bottom:18px;
+    }
+    .hero-main,.hero-score{
+      background:linear-gradient(135deg, rgba(16,27,46,.96), rgba(12,24,42,.96));
+      border:1px solid var(--hp-line);
+      border-radius:26px;
+      padding:24px;
+      box-shadow:0 18px 60px rgba(0,0,0,.25);
+    }
+    .horse-title{
+      display:flex;
+      gap:16px;
+      align-items:center;
+      min-width:0;
+    }
+    .horse-title .silk{
+      width:66px;
+      height:66px;
+      border-radius:999px;
+      background:#fff;
+      object-fit:contain;
+      padding:4px;
+      flex:0 0 auto;
+    }
+    .horse-title h1{
+      margin:0;
+      color:white;
+      font-size:clamp(28px,4vw,44px);
+      letter-spacing:-.05em;
+      line-height:1;
+    }
+    .horse-title .muted{
+      margin-top:8px;
+      color:var(--hp-muted);
+      font-size:14px;
+    }
+    .hero-meta{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:10px;
+      margin-top:18px;
+    }
+    .meta-chip{
+      background:rgba(15,23,42,.70);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:15px;
+      padding:12px;
+    }
+    .meta-chip span{
+      display:block;
+      color:#93c5fd;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      font-size:10px;
+      margin-bottom:5px;
+    }
+    .meta-chip b{
+      color:#fff;
+      font-size:17px;
+    }
+    .hero-score{
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      gap:16px;
+    }
+    .score-ring-large{
+      width:142px;
+      height:142px;
+      border-radius:999px;
+      display:grid;
+      place-items:center;
+      border:12px solid rgba(34,197,94,.85);
+      margin:0 auto;
+      color:#86efac;
+      font-size:34px;
+      font-weight:950;
+      box-shadow:0 0 45px rgba(34,197,94,.18);
+    }
+    .hero-score h3{
+      margin:0;
+      text-align:center;
+      color:#fff;
+      font-size:20px;
+    }
+    .hero-score p{
+      margin:0;
+      text-align:center;
+      color:var(--hp-muted);
+      line-height:1.45;
+    }
+
+    .quick-take-panel{
+      background:linear-gradient(135deg, rgba(8,47,73,.95), rgba(15,23,42,.95));
+      border:1px solid rgba(94,234,212,.35);
+      border-radius:24px;
+      padding:20px 22px;
+      margin-bottom:18px;
+    }
+    .quick-take-title{
+      color:var(--hp-accent);
+      font-size:12px;
+      font-weight:950;
+      text-transform:uppercase;
+      letter-spacing:.10em;
+      margin-bottom:8px;
+    }
+    .quick-take-text{
+      color:#f8fafc;
+      font-size:18px;
+      font-weight:750;
+      line-height:1.45;
+    }
+
+    .today-overlay-grid{
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:12px;
+      margin-bottom:18px;
+    }
+    .today-overlay-card{
+      background:rgba(16,27,46,.94);
+      border:1px solid var(--hp-line);
+      border-radius:18px;
+      padding:14px;
+      min-height:112px;
+    }
+    .today-overlay-card h4{
+      margin:0 0 8px;
+      font-size:11px;
+      color:#93c5fd;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+    .today-overlay-score{
+      display:block;
+      font-size:26px;
+      font-weight:950;
+      letter-spacing:-.04em;
+      margin-bottom:5px;
+    }
+    .overlay-positive{color:var(--hp-green)}
+    .overlay-neutral{color:var(--hp-blue)}
+    .overlay-negative{color:var(--hp-red)}
+    .today-overlay-card small{color:var(--hp-muted);line-height:1.35}
+
+    .profile-tabs{
+      position:sticky;
+      top:72px;
+      z-index:4;
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      background:rgba(7,17,31,.86);
+      backdrop-filter:blur(14px);
+      border:1px solid rgba(148,163,184,.10);
+      border-radius:999px;
+      padding:8px;
+      margin:20px 0 18px;
+    }
+    .profile-tab{
+      appearance:none;
+      border:1px solid rgba(148,163,184,.18);
+      background:rgba(15,23,42,.78);
+      color:#cbd5e1;
+      border-radius:999px;
+      padding:10px 14px;
+      font-weight:850;
+      cursor:pointer;
+    }
+    .profile-tab.active{
+      background:linear-gradient(135deg,#0f766e,#14b8a6);
+      color:#fff;
+      border-color:rgba(94,234,212,.65);
+    }
+
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+
+    .profile-section{
+      background:rgba(16,27,46,.94);
+      border:1px solid var(--hp-line);
+      border-radius:22px;
+      padding:20px;
+      margin-bottom:16px;
+      box-shadow:0 12px 34px rgba(0,0,0,.18);
+    }
+    .profile-section h3{
+      margin:0 0 14px;
+      color:#fff;
+      font-size:18px;
+      letter-spacing:-.02em;
+    }
+    .section-intro{
+      color:var(--hp-muted);
+      margin:-6px 0 16px;
+      line-height:1.45;
+    }
+    .stat-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+    }
+    .stat{
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:16px;
+      padding:14px;
+    }
+    .stat span{
+      display:block;
+      color:#93c5fd;
+      font-size:11px;
+      margin-bottom:6px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
+    }
+    .stat strong{
+      color:#fff;
+      font-size:22px;
+      line-height:1.1;
+      overflow-wrap:anywhere;
+    }
+    .stat small{
+      display:block;
+      color:var(--hp-muted);
+      margin-top:5px;
+      line-height:1.3;
+    }
+
+    .field-comparison-card{
+      background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(16,36,58,.95));
+      border:1px solid rgba(56,189,248,.32);
+      border-radius:22px;
+      padding:20px;
+      margin-bottom:16px;
+    }
+    .field-comparison-card h3{margin:0 0 12px}
+    .field-comparison-row{
+      display:flex;
+      justify-content:space-between;
+      gap:18px;
+      padding:10px 0;
+      border-bottom:1px solid rgba(148,163,184,.10);
+      color:#cbd5e1;
+    }
+    .field-comparison-row:last-child{border-bottom:none}
+    .insight-positive{color:#22c55e;font-weight:900}
+    .insight-negative{color:#ef4444;font-weight:900}
+    .insight-neutral{color:#38bdf8;font-weight:900}
+
+    .chart-grid-wrap{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:14px;
+    }
+    .chart-card{
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.12);
+      border-radius:18px;
+      padding:14px;
+    }
+    .chart-title{
+      color:#fff;
+      font-weight:900;
+      margin-bottom:8px;
+    }
+    .line-chart{width:100%;height:auto;display:block}
+    .chart-grid{stroke:rgba(148,163,184,.18);stroke-width:1}
+    .chart-line{fill:none;stroke:#5eead4;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(94,234,212,.18))}
+    .chart-area{fill:rgba(94,234,212,.10)}
+    .chart-dot{fill:#38bdf8;stroke:#07111f;stroke-width:2}
+    .chart-label{fill:#bfdbfe;font-size:12px}
+
+    .xp-breakdown{
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:18px;
+      padding:16px;
+    }
+    .xp-total{
+      color:#5eead4;
+      font-size:24px;
+      font-weight:950;
+      margin-bottom:12px;
+    }
+    .xp-line{
+      display:flex;
+      justify-content:space-between;
+      gap:16px;
+      border-bottom:1px solid rgba(148,163,184,.10);
+      padding:9px 0;
+      color:#e5edf8;
+    }
+    .xp-line:last-child{border-bottom:none}
+    .xp-line strong{color:#fff}
+
+    .condition-grid{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+    }
+    .condition-card{
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:18px;
+      padding:14px;
+    }
+    .condition-top{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .condition-top span{
+      color:#93c5fd;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.07em;
+    }
+    .condition-top strong{
+      color:#fff;
+      font-size:17px;
+      text-align:right;
+    }
+    .condition-metrics,.condition-note{
+      color:#cbd5e1;
+      margin-top:10px;
+      line-height:1.4;
+    }
+    .condition-metrics b{color:#5eead4}
+
+    .perf-chart-card,.pace-profile-card,.confidence-card{
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:20px;
+      padding:16px;
+    }
+    .perf-chart-head,.pace-profile-head,.confidence-card-head{
+      display:flex;
+      justify-content:space-between;
+      gap:14px;
+      color:#bfdbfe;
+      text-transform:uppercase;
+      letter-spacing:.07em;
+      font-size:11px;
+      margin-bottom:12px;
+    }
+    .perf-row{
+      display:grid;
+      grid-template-columns:220px 1fr 160px;
+      gap:14px;
+      align-items:center;
+      border:1px solid rgba(148,163,184,.10);
+      border-radius:14px;
+      padding:12px;
+      margin-bottom:10px;
+      background:rgba(2,6,23,.22);
+    }
+    .perf-label strong{display:block;color:#fff}
+    .perf-label span{color:var(--hp-muted);font-size:12px}
+    .perf-bar-line{
+      display:grid;
+      grid-template-columns:52px 1fr 42px;
+      gap:8px;
+      align-items:center;
+      color:#93c5fd;
+      font-size:12px;
+      margin:4px 0;
+    }
+    .perf-track,.signal-track{
+      height:8px;
+      border-radius:999px;
+      background:rgba(148,163,184,.14);
+      overflow:hidden;
+    }
+    .perf-track b,.signal-track b{
+      display:block;
+      height:100%;
+      border-radius:999px;
+    }
+    .perf-track b.place{background:linear-gradient(90deg,#5eead4,#22c55e)}
+    .perf-track b.sample{background:#60a5fa}
+    .perf-stats{color:#cbd5e1;font-size:13px;text-align:right}
+    .perf-stats b{color:#5eead4}
+
+    .signal-row{
+      display:grid;
+      grid-template-columns:210px 1fr;
+      gap:14px;
+      align-items:center;
+      margin:14px 0;
+    }
+    .signal-label span{display:block;color:#fff;font-weight:900}
+    .signal-label em{color:var(--hp-muted);font-style:normal;font-size:12px}
+    .signal-track b{background:linear-gradient(90deg,#5eead4,#22c55e)}
+
+    .info-list{
+      display:grid;
+      gap:8px;
+    }
+    .info-list div{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:14px;
+      padding:12px;
+      color:#cbd5e1;
+    }
+    .info-list b{color:#fff}
+
+    .run-list{display:grid;gap:10px}
+    .run-card{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:16px;
+      align-items:center;
+      background:rgba(15,23,42,.72);
+      border:1px solid rgba(148,163,184,.13);
+      border-radius:18px;
+      padding:14px;
+    }
+    .run-card strong{color:#fff}
+    .comment{color:#e2e8f0;line-height:1.45;margin-top:8px}
+    .xp{
+      display:grid;
+      place-items:center;
+      min-width:74px;
+      height:74px;
+      border-radius:999px;
+      background:rgba(34,197,94,.16);
+      border:1px solid rgba(34,197,94,.35);
+      color:#86efac;
+      font-weight:950;
+    }
+
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .muted{color:var(--hp-muted)}
+    .small{font-size:12px}
+    .warning-box{
+      background:rgba(245,158,11,.10);
+      border:1px solid rgba(245,158,11,.28);
+      border-radius:16px;
+      padding:12px 14px;
+      color:#fde68a;
+      margin:14px 0;
+    }
+    .conf-high{color:#22c55e}.conf-medium{color:#f59e0b}.conf-low{color:#ef4444}
+    .confidence-note{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      background:rgba(2,6,23,.20);
+      border:1px solid rgba(148,163,184,.10);
+      border-radius:14px;
+      padding:10px;
+      margin-bottom:8px;
+    }
+    .confidence-note span{color:#5eead4;font-weight:950}
+    .confidence-note p{margin:0;color:#e2e8f0}
+
+    @media(max-width:1000px){
+      .horse-hero{grid-template-columns:1fr}
+      .today-overlay-grid{grid-template-columns:repeat(2,1fr)}
+      .stat-grid,.condition-grid{grid-template-columns:repeat(2,1fr)}
+      .chart-grid-wrap,.two-col{grid-template-columns:1fr}
+      .perf-row{grid-template-columns:1fr}
+    }
+    @media(max-width:640px){
+      .today-overlay-grid,.stat-grid,.condition-grid{grid-template-columns:1fr}
+      .hero-meta{grid-template-columns:repeat(2,1fr)}
+      .profile-tabs{border-radius:20px}
+    }
+  </style>
+</head>
+<body>
+  <main class="profile-page">
+    <a class="backlink" href="/">← Back to race dashboard</a>
+    <div id="horseProfileContent"><div class="profile-section">Loading horse profile...</div></div>
+  </main>
+
+<script>
+const horseProfileContent = document.getElementById('horseProfileContent');
+
+function escapeHtml(v){ return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+function titleCaseLabel(v){
+  return String(v ?? '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .trim()
+    .replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+function silk(url){ return url ? `<img class="silk" src="${escapeHtml(url)}" alt="silk" onerror="this.style.display='none'">` : `<div class="silk"></div>`; }
+function money(v){ const n = Number(v || 0); return n ? '£' + n.toLocaleString(undefined, {maximumFractionDigits: 0}) : '-'; }
+function rate(v){ return v === null || v === undefined ? '-' : `${escapeHtml(v)}%`; }
+function xp(v){ return `<span class="xp">XP ${escapeHtml(v ?? '-')}</span>`; }
+function safeScore(v, fallback='-'){
+  if(v === null || v === undefined) return fallback;
+  if(typeof v === 'object'){
+    if(v.score !== undefined) return v.score;
+    if(v.value !== undefined) return v.value;
+    if(v.total !== undefined) return v.total;
+    if(v.label !== undefined) return v.label;
+    return fallback;
+  }
+  const t = String(v).trim();
+  return t && t !== '[object Object]' ? t : fallback;
+}
+function statBlock(label, value, note=''){
+  return `<div class="stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(safeScore(value))}</strong>${note ? `<small>${escapeHtml(note)}</small>` : ''}</div>`;
+}
+function sampleText(runs, pct){
+  const n = Number(runs || 0);
+  if(n <= 2) return `${n}/${n} sample · limited confidence`;
+  return pct === null || pct === undefined ? `${n} run sample` : `${pct}% from ${n} runs`;
+}
+function overlayClass(v){
+  const t = String(v ?? '').toLowerCase();
+  if(t.includes('low') || t.includes('poor') || t.includes('negative') || t.includes('concern')) return 'overlay-negative';
+  if(t.includes('medium') || t.includes('moderate') || t.includes('neutral') || t.includes('building')) return 'overlay-neutral';
+  return 'overlay-positive';
+}
+function xpBreakdownHtml(b){
+  if(!b || !b.parts) return '<div class="muted">No XP breakdown available.</div>';
+  return `<div class="xp-breakdown"><div class="xp-total">XP ${escapeHtml(safeScore(b.total))}</div>${b.parts.map(p => `<div class="xp-line"><span>${escapeHtml(p.label)}</span><strong>${Number(p.value || 0) >= 0 ? '+' : ''}${escapeHtml(p.value)}</strong></div>`).join('')}</div>`;
+}
+function lineChart(points, valueKey, label){
+  if(!points || !points.length) return `<div class="muted">No ${escapeHtml(label)} data yet.</div>`;
+  const prepared = points.map((p,i)=>({...p,_v:Number(p[valueKey]),_i:i})).filter(p=>!Number.isNaN(p._v));
+  if(!prepared.length) return `<div class="muted">No ${escapeHtml(label)} data yet.</div>`;
+  const width=760,height=220,pad=32, vals=prepared.map(p=>p._v);
+  const min=Math.min(...vals), max=Math.max(...vals), range=Math.max(1,max-min);
+  const x=i=>pad+(prepared.length===1?(width-pad*2)/2:i*((width-pad*2)/(prepared.length-1)));
+  const y=v=>height-pad-((v-min)/range)*(height-pad*2);
+  const line=prepared.map((p,i)=>`${i?'L':'M'} ${x(i).toFixed(1)} ${y(p._v).toFixed(1)}`).join(' ');
+  const area=`M ${x(0).toFixed(1)} ${height-pad} ` + prepared.map((p,i)=>`L ${x(i).toFixed(1)} ${y(p._v).toFixed(1)}`).join(' ') + ` L ${x(prepared.length-1).toFixed(1)} ${height-pad} Z`;
+  const trend = prepared.length > 1 ? prepared[prepared.length-1]._v - prepared[0]._v : 0;
+  const trendText = trend > 0 ? `↑ +${trend.toFixed(1)}` : trend < 0 ? `↓ ${trend.toFixed(1)}` : '→ flat';
+  return `<div class="chart-card"><div class="chart-title">${escapeHtml(label)} <span class="${trend>=0?'insight-positive':'insight-negative'}" style="float:right">${escapeHtml(trendText)}</span></div><svg class="line-chart" viewBox="0 0 ${width} ${height}"><path class="chart-grid" d="M ${pad} ${pad} H ${width-pad} M ${pad} ${height-pad} H ${width-pad}"/><path class="chart-area" d="${area}"/><path class="chart-line" d="${line}"/>${prepared.map((p,i)=>`<circle class="chart-dot" cx="${x(i)}" cy="${y(p._v)}" r="4"><title>${escapeHtml(p.date)} ${escapeHtml(p.course||'')} ${escapeHtml(p._v)}</title></circle>`).join('')}<text x="${pad}" y="18" class="chart-label">${max}</text><text x="${pad}" y="${height-6}" class="chart-label">${min}</text></svg></div>`;
+}
+function seriesChart(series,label,invert=false){
+  const pts=(series||[]).map(x=>({date:x.date,course:x.course,value:x.value}));
+  if(!pts.length) return `<div class="muted">No ${escapeHtml(label)} chart yet.</div>`;
+  if(!invert) return lineChart(pts,'value',label);
+  const valid=pts.filter(p=>p.value!==null&&p.value!==undefined&&!Number.isNaN(Number(p.value)));
+  const max=Math.max(...valid.map(p=>Number(p.value)),1);
+  return lineChart(valid.map(p=>({...p,value:max+1-Number(p.value)})),'value',label+' (higher line = better finish)');
+}
+function plural(n,one,many){ return Number(n)===1 ? one : many; }
+function conditionCard(label,value,x,extra=''){
+  const runs=Number(x?.runs||0), wins=Number(x?.wins||0), places=Number(x?.places||0);
+  const placeRate=x?.placing_rate ?? (runs ? Math.round((places/runs)*100) : null);
+  const rateText = runs <= 2 && placeRate !== null ? sampleText(runs, placeRate) : (placeRate !== null ? `Place rate: ${placeRate}%` : '');
+  return `<article class="condition-card">
+    <div class="condition-top"><span>${escapeHtml(titleCaseLabel(label))}</span><strong>${escapeHtml(value||'-')}</strong></div>
+    <div class="condition-metrics"><b>${wins}</b> ${plural(wins,'win','wins')} · <b>${places}</b> ${plural(places,'place','places')} · <b>${runs}</b> ${plural(runs,'run','runs')}</div>
+    ${rateText?`<div class="condition-note">${escapeHtml(rateText)}</div>`:''}
+    ${extra?`<div class="condition-note">${extra}</div>`:''}
+  </article>`;
+}
+function bestConditionsHtml(items){ if(!items||!items.length)return'<div class="muted">No best-condition profile yet.</div>'; return `<div class="condition-grid">${items.map(x=>conditionCard(x.type,x.value,x)).join('')}</div>`; }
+function suitabilityHtml(items){
+  if(!items||!items.length)return'<div class="muted">No suitability profile yet.</div>';
+  return `<div class="condition-grid">${items.map(x=>{
+    const confidence=titleCaseLabel(x.confidence||'Limited');
+    const cls=confidence.toLowerCase().includes('high')?'high':confidence.toLowerCase().includes('medium')?'medium':'low';
+    return conditionCard(`${x.type} suitability`,x.value,x,`Confidence: <b class="conf-${cls}">${escapeHtml(confidence)}</b>`);
+  }).join('')}</div>`;
+}
+function performanceChart(items, labelKey, title='Performance profile'){
+  if(!items || !items.length) return '<div class="muted">No record yet.</div>';
+  const rows = items.map(x => {
+    const label = x[labelKey] ?? x.label ?? x.course ?? x.going ?? x.distance ?? '-';
+    const runs = Number(x.runs || 0), wins = Number(x.wins || 0), places = Number(x.places || 0);
+    const avgRpr = x.avg_rpr ?? x.average_rpr ?? null;
+    const placeRate = runs ? Math.round((places / runs) * 100) : 0;
+    return { label, runs, wins, places, avgRpr, placeRate };
+  }).filter(r => r.runs > 0);
+  if(!rows.length) return '<div class="muted">No record yet.</div>';
+  rows.sort((a,b) => (b.placeRate - a.placeRate) || (b.wins - a.wins) || (b.runs - a.runs));
+  const maxRuns = Math.max(1, ...rows.map(r => r.runs));
+  return `<div class="perf-chart-card">
+    <div class="perf-chart-head"><span>${escapeHtml(title)}</span><strong>${rows.length} profiles</strong></div>
+    <div class="perf-chart-rows">${rows.slice(0,12).map(r => {
+      const runWidth = Math.max(6, Math.round((r.runs / maxRuns) * 100));
+      const placeWidth = Math.max(4, r.placeRate);
+      return `<div class="perf-row">
+        <div class="perf-label"><strong>${escapeHtml(r.label)}</strong><span>${r.runs} ${r.runs===1?'run':'runs'}</span></div>
+        <div class="perf-bars">
+          <div class="perf-bar-line"><span>Place</span><div class="perf-track"><b class="place" style="width:${placeWidth}%"></b></div><em>${r.runs <= 2 ? 'limited' : r.placeRate + '%'}</em></div>
+          <div class="perf-bar-line"><span>Sample</span><div class="perf-track"><b class="sample" style="width:${runWidth}%"></b></div><em>${r.runs}</em></div>
+        </div>
+        <div class="perf-stats"><b>${r.wins}</b>W <b>${r.places}</b>P${r.avgRpr!==null && r.avgRpr!==undefined ? ` · avg RPR <b>${escapeHtml(r.avgRpr)}</b>` : ''}</div>
+      </div>`;
+    }).join('')}</div>
+    <div class="muted small">Bars show place rate and sample size. Small samples are marked carefully.</div>
+  </div>`;
+}
+function simpleBars(items, labelKey){ return performanceChart(items, labelKey, 'Performance profile'); }
+function signalBars(signals){
+  if(!signals || !Object.keys(signals).length) return '<div class="muted">No pace signals yet.</div>';
+  const entries = Object.entries(signals).map(([k,v]) => ({ label:titleCaseLabel(k), value:Number(v||0) })).filter(x=>x.value>0).sort((a,b)=>b.value-a.value);
+  if(!entries.length) return '<div class="muted">No pace signals yet.</div>';
+  const total = entries.reduce((sum,x)=>sum+x.value,0), max=Math.max(1,...entries.map(x=>x.value));
+  return `<div class="pace-profile-card"><div class="pace-profile-head"><span>Run-style signals</span><strong>${total} clues</strong></div><div class="signal-bars">${entries.map(x=>{
+    const pct=total?Math.round((x.value/total)*100):0, width=Math.max(6,(x.value/max)*100);
+    return `<div class="signal-row"><div class="signal-label"><span>${escapeHtml(x.label)}</span><em>${x.value} ${x.value===1?'run':'runs'} · ${pct}%</em></div><div class="signal-track"><b style="width:${width}%"></b></div></div>`;
+  }).join('')}</div><div class="muted small">Inferred from race comments, so treat this as a guide rather than exact sectional data.</div></div>`;
+}
+function confidenceReasons(conf){
+  const reasons = conf?.reasons || [];
+  if(!reasons.length) return '<div class="muted">No confidence notes yet.</div>';
+  return `<div class="confidence-card"><div class="confidence-card-head"><span>Why this confidence level?</span><strong>${escapeHtml(conf?.label || '')}${conf?.score !== undefined ? ' · ' + escapeHtml(conf.score) + '/100' : ''}</strong></div><div class="confidence-notes">${reasons.map(x => `<div class="confidence-note"><span>✓</span><p>${escapeHtml(x)}</p></div>`).join('')}</div></div>`;
+}
+function runList(items){
+  if(!items||!items.length)return'<div class="muted">No examples yet.</div>';
+  return `<div class="run-list">${items.map(r=>`<div class="run-card"><div><strong>${escapeHtml(r.date)} · ${escapeHtml(r.course)} · ${escapeHtml(r.position||'')}</strong><div class="comment">${escapeHtml(r.comment||'')}</div></div></div>`).join('')}</div>`;
+}
+function classCeilingHtml(c){ if(!c)return'<div class="muted">No class ceiling yet.</div>'; return `<div class="info-list"><div><span>Class ceiling</span><b>${escapeHtml(c.label||'-')}</b></div></div><br>${simpleBars(c.records||[],'class')}`; }
+function raceStrengthHtml(r){ if(!r)return'<div class="muted">No race strength profile yet.</div>'; return `<div class="info-list"><div><span>Race strength index</span><b>${escapeHtml(r.score??'-')} / 100</b></div><div><span>Label</span><b>${escapeHtml(r.label||'-')}</b></div><div><span>Average RPR</span><b>${escapeHtml(r.avg_rpr??'-')}</b></div><div><span>Best RPR</span><b>${escapeHtml(r.best_rpr??'-')}</b></div></div><div class="muted small">${escapeHtml(r.note||'')}</div>`; }
+function marketOutcomesHtml(m){ if(!m)return'<div class="muted">No market outcome profile yet.</div>'; return `<div class="info-list"><div><span>Outperformed market</span><b>${escapeHtml(m.outperformed_count??0)} runs</b></div><div><span>Disappointed market</span><b>${escapeHtml(m.disappointed_count??0)} runs</b></div></div><div class="muted small">${escapeHtml(m.note||'')}</div>`; }
+function tabButton(id,label,active=false){ return `<button class="profile-tab ${active?'active':''}" type="button" data-tab="${id}">${escapeHtml(label)}</button>`; }
+
+function buildQuickTake(data, intel, s){
+  const name = data.horse || 'This horse';
+  const trend = Number(s.rpr_trend || 0);
+  const hidden = Number(intel.hidden_form?.hidden_form_score || 0);
+  const best = intel.best_conditions?.[0];
+  const lines = [];
+  if(trend > 5) lines.push('positive RPR momentum');
+  if(hidden >= 60) lines.push('strong hidden-form clues');
+  if(best) lines.push(`best evidence around ${best.value}`);
+  if(!lines.length) lines.push('profile still developing with limited high-confidence evidence');
+  return `${name} shows ${lines.join(', ')}. Treat small-sample 100% records carefully; the key value is the direction of the profile rather than raw percentages.`;
+}
+function overlayCards(data, intel, s){
+  const confidence = intel.confidence || {};
+  const hidden = Number(intel.hidden_form?.hidden_form_score ?? 0);
+  const consistency = safeScore(intel.consistency_score ?? intel.consistency, '-');
+  const raceStrength = safeScore(intel.race_strength?.score, '-');
+  const bestCondition = intel.best_conditions?.[0]?.value || 'Building';
+  const market = intel.market?.short_price_place_rate !== undefined ? `${intel.market.short_price_place_rate}%` : 'Building';
+  const items = [
+    ['Confidence', confidence.score !== undefined ? `${confidence.score}/100` : confidence.label || 'Building', confidence.label || 'Developing'],
+    ['Consistency', consistency !== '-' ? `${consistency}/100` : 'Building', 'Profile reliability'],
+    ['Hidden form', `${hidden}/100`, hidden >= 60 ? 'Positive signals' : 'Limited edge'],
+    ['Best setup', bestCondition, 'Best historical evidence'],
+    ['Market guide', market, 'Short-price place rate']
+  ];
+  return `<div class="today-overlay-grid">${items.map(([label,score,note])=>`<div class="today-overlay-card"><h4>${escapeHtml(label)}</h4><span class="today-overlay-score ${overlayClass(score + ' ' + note)}">${escapeHtml(score)}</span><small>${escapeHtml(note)}</small></div>`).join('')}</div>`;
+}
+function fieldComparisonCard(intel, s){
+  const trend = Number(s.rpr_trend || 0);
+  const hidden = Number(intel.hidden_form?.hidden_form_score || 0);
+  const strength = Number(intel.race_strength?.score || 0);
+  return `<div class="field-comparison-card">
+    <h3>Compared To Today's Field</h3>
+    <p class="section-intro">This is the structure for the field-comparison engine. It will become stronger as race-level comparisons are added.</p>
+    <div class="field-comparison-row"><span>Recent RPR Momentum</span><span class="${trend>0?'insight-positive':'insight-neutral'}">${trend>0?'Positive trend':'Neutral trend'}</span></div>
+    <div class="field-comparison-row"><span>Hidden Form Evidence</span><span class="${hidden>=60?'insight-positive':hidden>=35?'insight-neutral':'insight-negative'}">${hidden>=60?'Strong':'Developing'}</span></div>
+    <div class="field-comparison-row"><span>Race Strength Profile</span><span class="${strength>=60?'insight-positive':strength>=35?'insight-neutral':'insight-negative'}">${strength}/100</span></div>
+    <div class="field-comparison-row"><span>Sample Warning</span><span class="insight-neutral">Use confidence before percentages</span></div>
+  </div>`;
+}
+function recentRunsHtml(data){
+  return `<div class="run-list">${(data.recent_runs||[]).map(r=>`<div class="run-card"><div><strong>${escapeHtml(r.date)} · ${escapeHtml(r.course)} · ${escapeHtml(r.position)}</strong><div>${escapeHtml(r.race_name||'')}</div><div class="muted">SP ${escapeHtml(r.sp??'-')} · RPR ${escapeHtml(r.rpr??'-')} · OR ${escapeHtml(r.or??'-')} · Beaten ${escapeHtml(r.beaten_distance??'-')}</div>${r.comment?`<div class="comment">${escapeHtml(r.comment)}</div>`:''}</div>${xp(r.xp)}</div>`).join('')||'<div class="muted">No previous result runs stored yet.</div>'}</div>`;
+}
+
+function renderHorseProfile(data){
+  if(!data.found){
+    horseProfileContent.innerHTML = `<div class="profile-section">${escapeHtml(data.message || 'No data found.')}</div>`;
+    return;
+  }
+
+  const s = data.summary || {};
+  const intel = data.intelligence || {};
+  const latestFuture = (data.future_entries || [])[0];
+  const confidence = intel.confidence || {};
+  const consistency = safeScore(intel.consistency_score ?? intel.consistency, '-');
+  const hidden = safeScore(intel.hidden_form?.hidden_form_score, 0);
+  const raceStrength = safeScore(intel.race_strength?.score, 0);
+  const quickTake = buildQuickTake(data, intel, s);
+
+  horseProfileContent.innerHTML = `
+    <section class="horse-hero">
+      <div class="hero-main">
+        <div class="horse-title">
+          ${silk(data.silk_url)}
+          <div>
+            <h1>${escapeHtml(data.horse)}</h1>
+            <div class="muted">${escapeHtml(s.age??'-')}yo ${escapeHtml(s.sex??'')} ${s.trainer?' · '+escapeHtml(s.trainer):''}</div>
+          </div>
+        </div>
+        <div class="hero-meta">
+          ${statBlock('Runs',s.runs)}
+          ${statBlock('Wins',s.wins)}
+          ${statBlock('Places',s.places)}
+          ${statBlock('Prize money',money(s.prize_money))}
+        </div>
+      </div>
+      <div class="hero-score">
+        <div class="score-ring-large">${escapeHtml(confidence.score ?? '-')}</div>
+        <h3>${escapeHtml(confidence.label || 'Developing')} confidence</h3>
+        <p>Evidence depth and reliability score, not a prediction.</p>
+      </div>
+    </section>
+
+    ${data.data_warning ? `<div class="warning-box">${escapeHtml(data.data_warning)}</div>` : ''}
+
+    <section class="quick-take-panel">
+      <div class="quick-take-title">Quick Take</div>
+      <div class="quick-take-text">${escapeHtml(quickTake)}</div>
+    </section>
+
+    ${overlayCards(data, intel, s)}
+
+    <nav class="profile-tabs">
+      ${tabButton('overview','Overview',true)}
+      ${tabButton('form','Form')}
+      ${tabButton('today','Today / xP')}
+      ${tabButton('suitability','Suitability')}
+      ${tabButton('pace','Pace & Hidden Form')}
+      ${tabButton('market','Market')}
+      ${tabButton('records','Records')}
+    </nav>
+
+    <section id="tab-overview" class="tab-panel active">
+      <div class="profile-section">
+        <h3>Intelligence Summary</h3>
+        <div class="stat-grid">
+          ${statBlock('Confidence', `${escapeHtml(confidence.label || 'Developing')} · ${escapeHtml(confidence.score ?? '-')}/100`)}
+          ${statBlock('Consistency', consistency !== '-' ? `${consistency}/100` : 'Building')}
+          ${statBlock('Hidden form', `${hidden}/100`)}
+          ${statBlock('Race strength', `${raceStrength}/100`)}
+          ${statBlock('Strike rate',rate(s.strike_rate))}
+          ${statBlock('Placing rate',rate(s.placing_rate))}
+          ${statBlock('Best RPR',s.best_rpr)}
+          ${statBlock('Latest RPR',s.latest_rpr)}
+        </div>
+      </div>
+      ${fieldComparisonCard(intel, s)}
+      <div class="profile-section"><h3>Confidence Notes</h3>${confidenceReasons(intel.confidence)}</div>
+    </section>
+
+    <section id="tab-form" class="tab-panel">
+      <div class="profile-section"><h3>Visual Form</h3><p class="section-intro">Trend charts use the historical runs loaded in your database.</p><div class="chart-grid-wrap">${seriesChart(intel.visual_series?.rpr,'RPR movement')}${seriesChart(intel.visual_series?.official_rating,'Official rating movement')}${seriesChart(intel.visual_series?.finishing_positions,'Finishing position',true)}${seriesChart(intel.visual_series?.prize_cumulative,'Cumulative prize money')}</div></div>
+      <div class="profile-section"><h3>Recent Runs</h3>${recentRunsHtml(data)}</div>
+    </section>
+
+    <section id="tab-today" class="tab-panel">
+      ${latestFuture ? `<div class="profile-section"><h3>XP for Selected / Future Race</h3>${xpBreakdownHtml(latestFuture.xp_breakdown)}</div>` : `<div class="profile-section"><h3>XP for Selected / Future Race</h3><div class="muted">No selected/future race XP available yet.</div></div>`}
+      ${fieldComparisonCard(intel, s)}
+    </section>
+
+    <section id="tab-suitability" class="tab-panel">
+      <div class="profile-section"><h3>Best Conditions</h3>${bestConditionsHtml(intel.best_conditions)}</div>
+      <div class="profile-section"><h3>Suitability Snapshot</h3>${suitabilityHtml(intel.suitability_snapshot)}</div>
+      <div class="profile-section"><h3>Course / Going / Distance</h3><div class="two-col">${simpleBars(data.course_record,'course')}${simpleBars(data.going_record,'going')}</div><br>${simpleBars(data.distance_record,'distance')}</div>
+    </section>
+
+    <section id="tab-pace" class="tab-panel">
+      <div class="profile-section"><h3>Hidden Form / Run Merit</h3><div class="info-list"><div><span>Hidden form score</span><b>${escapeHtml(hidden)} / 100</b></div></div><br><h3>Better Than Result Clues</h3>${runList(intel.hidden_form?.hidden_form_runs)}<br><h3>Strong Finish Clues</h3>${runList(intel.hidden_form?.positive_finish_runs)}<br><h3>Negative Finish Clues</h3>${runList(intel.hidden_form?.negative_finish_runs)}<div class="muted small">${escapeHtml(intel.hidden_form?.note||'')}</div></div>
+      <div class="profile-section"><h3>Pace / Run Style</h3>${signalBars(intel.pace?.signals)}</div>
+    </section>
+
+    <section id="tab-market" class="tab-panel">
+      <div class="profile-section"><h3>Market Outcomes</h3>${marketOutcomesHtml(intel.market_outcomes)}</div>
+      <div class="profile-section"><h3>Market Intelligence</h3><div class="info-list"><div><span>Average SP</span><b>${escapeHtml(intel.market?.avg_sp??'-')}</b></div><div><span>Short-price runs</span><b>${escapeHtml(intel.market?.short_price_runs??'-')}</b></div><div><span>Short-price place rate</span><b>${rate(intel.market?.short_price_place_rate)}</b></div></div><div class="muted small">${escapeHtml(intel.market?.note||'')}</div></div>
+      <div class="profile-section"><h3>Freshness / Layoff</h3><div class="info-list"><div><span>Quick return</span><b>${escapeHtml(intel.freshness?.quick_return?.runs??0)} runs · avg RPR ${escapeHtml(intel.freshness?.quick_return?.avg_rpr??'-')}</b></div><div><span>Normal gap</span><b>${escapeHtml(intel.freshness?.normal?.runs??0)} runs · avg RPR ${escapeHtml(intel.freshness?.normal?.avg_rpr??'-')}</b></div><div><span>Fresh after break</span><b>${escapeHtml(intel.freshness?.fresh?.runs??0)} runs · avg RPR ${escapeHtml(intel.freshness?.fresh?.avg_rpr??'-')}</b></div></div></div>
+    </section>
+
+    <section id="tab-records" class="tab-panel">
+      <div class="profile-section"><h3>Class Ceiling</h3>${classCeilingHtml(intel.class_ceiling)}</div>
+      <div class="profile-section"><h3>Race Strength</h3>${raceStrengthHtml(intel.race_strength)}</div>
+      <div class="profile-section"><h3>Class / Surface / Draw</h3><div class="two-col">${simpleBars(intel.class_record,'label')}${simpleBars(intel.surface_record,'label')}</div><br>${simpleBars(intel.draw_record,'label')}</div>
+    </section>
+  `;
+
+  document.querySelectorAll('.profile-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.profile-tab').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(x=>x.classList.remove('active'));
+      btn.classList.add('active');
+      const target = document.getElementById('tab-' + btn.dataset.tab);
+      if(target) target.classList.add('active');
+    });
+  });
+}
+
+const params = new URLSearchParams(location.search);
+fetch('/api/horse?' + params.toString())
+  .then(r=>r.json())
+  .then(renderHorseProfile)
+  .catch(err=>{
+    console.error('Horse profile load failed', err);
+    horseProfileContent.innerHTML='<div class="profile-section">Could not load profile. Run the historical rebuild from Admin, then refresh.</div>';
+  });
+</script>
+</body>
+</html>

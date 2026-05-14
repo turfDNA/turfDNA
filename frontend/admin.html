@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Race Intelligence Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+<header class="header">
+  <div class="brand">Hidden Admin</div>
+  <nav class="nav"><a href="/">Back to website</a></nav>
+</header>
+<main class="main">
+  <section class="hero">
+    <h1>Daily Update</h1>
+    <p>Put files into the folders below, then run the update. Historical results are imported once. Daily results are added into the same growing database each day.</p>
+  </section>
+  <section class="grid">
+    <div class="card form">
+      <input id="password" type="password" placeholder="Admin password" />
+      <div class="note"><strong>Password:</strong> admin123</div>
+      <button class="button" onclick="showFolders()">Show folder locations</button>
+      <div class="note">
+        <strong>Folder workflow</strong><br>
+        historical_results = your 12 month results CSV/ZIP<br>
+        daily_results = new daily results CSV/ZIP<br>
+        daily_racecards = new racecard CSV/ZIP
+      </div>
+      <label>Optional upload: historical results CSV or ZIP</label>
+      <input id="historicalFile" type="file" accept=".csv,.zip" />
+      <button class="button" onclick="upload('historical_results')">Upload historical results</button>
+      <label>Optional upload: daily results CSV or ZIP</label>
+      <input id="dailyResultsFile" type="file" accept=".csv,.zip" />
+      <button class="button" onclick="upload('daily_results')">Upload daily results</button>
+      <label>Optional upload: racecards CSV or ZIP</label>
+      <input id="racecardsFile" type="file" accept=".csv,.zip" />
+      <button class="button" onclick="upload('racecards')">Upload racecards to daily_racecards</button>
+      <button class="button primary" onclick="runUpdate()">Run Update</button>
+      <button class="button danger" onclick="rebuildAll()">Rebuild Historical Database</button>
+      <button class="button" onclick="diagnostics()">Check Import Diagnostics</button>
+    </div>
+    <div class="card">
+      <h2>Status</h2>
+      <pre id="statusBox">Enter password and click refresh status.</pre>
+      <button class="button" onclick="refreshStatus()">Refresh status</button>
+    </div>
+  </section>
+</main>
+<script>
+const statusBox = document.getElementById('statusBox');
+function password(){ return document.getElementById('password').value; }
+function setStatus(obj){ statusBox.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); }
+function inputFor(type){
+  if(type === 'historical_results') return document.getElementById('historicalFile');
+  if(type === 'daily_results') return document.getElementById('dailyResultsFile');
+  return document.getElementById('racecardsFile');
+}
+async function upload(type){
+  const input = inputFor(type);
+  if(!input.files.length){ setStatus('Choose a CSV or ZIP file first.'); return; }
+  const form = new FormData();
+  form.append('password', password());
+  form.append('file_type', type);
+  form.append('file', input.files[0]);
+  const res = await fetch('/api/admin/upload', {method:'POST', body:form});
+  setStatus(await res.json());
+}
+async function runUpdate(){
+  setStatus('Running update. Historical import may take several minutes the first time...');
+  const form = new FormData();
+  form.append('password', password());
+  const res = await fetch('/api/admin/run', {method:'POST', body:form});
+  setStatus(await res.json());
+}
+async function refreshStatus(){
+  const res = await fetch('/api/admin/status?password=' + encodeURIComponent(password()));
+  setStatus(await res.json());
+}
+
+async function rebuildAll(){
+  if(!confirm('This will clear the current imported database and rebuild it from the CSV/ZIP files in data_inbox. Continue?')) return;
+  setStatus('Rebuilding from folders. This can take several minutes for 12 months of results...');
+  const form = new FormData();
+  form.append('password', password());
+  const res = await fetch('/api/admin/rebuild', {method:'POST', body:form});
+  setStatus(await res.json());
+}
+async function diagnostics(){
+  const res = await fetch('/api/admin/diagnostics?password=' + encodeURIComponent(password()));
+  setStatus(await res.json());
+}
+
+async function showFolders(){
+  const res = await fetch('/api/admin/folders?password=' + encodeURIComponent(password()));
+  setStatus(await res.json());
+}
+</script>
+</body>
+</html>

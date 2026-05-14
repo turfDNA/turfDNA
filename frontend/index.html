@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Race Intelligence Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="brand">Race Intelligence Dashboard</div>
+    <nav class="nav">
+      <button id="btnRacecards" class="active">Today / Tomorrow Racecards</button>
+      <button id="btnResults">Results Review</button>
+      <a href="/admin">Admin</a>
+    </nav>
+  </header>
+  <main class="main">
+    <section class="hero">
+      <h1 id="pageTitle">Racecards</h1>
+      <p id="pageIntro">Daily racing data grouped by course and time.</p>
+    </section>
+    <section id="content" class="grid"></section>
+  </main>
+  <div id="horseModal" class="horse-modal hidden">
+    <div class="horse-modal-backdrop" id="horseModalBackdrop"></div>
+    <aside class="horse-drawer">
+      <button id="horseModalClose" class="modal-close" type="button">×</button>
+      <div id="horseProfileContent" class="horse-profile-content">Loading...</div>
+    </aside>
+  </div>
+<script>
+const content = document.getElementById('content');
+const title = document.getElementById('pageTitle');
+const intro = document.getElementById('pageIntro');
+const btnRacecards = document.getElementById('btnRacecards');
+const btnResults = document.getElementById('btnResults');
+const horseModal = document.getElementById('horseModal');
+const horseProfileContent = document.getElementById('horseProfileContent');
+const horseModalClose = document.getElementById('horseModalClose');
+const horseModalBackdrop = document.getElementById('horseModalBackdrop');
+
+const state = { openCourse: null, openRace: null, mode: 'racecards' };
+
+function silk(url){ return url ? `<img class="silk" src="${escapeHtml(url)}" alt="silk" onerror="this.style.display='none'">` : `<div class="silk"></div>`; }
+function escapeHtml(v){ return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s])); }
+function xp(v){ return `<span class="xp">XP ${escapeHtml(v ?? '-')}</span>`; }
+
+function priceHtml(r){
+  const dec = r.odds_decimal ?? r.runner_odds_decimal ?? '';
+  const frac = r.odds_fractional ?? r.runner_odds_fractional ?? '';
+  const book = r.odds_bookmaker ?? r.runner_odds_bookmaker ?? '';
+  const upd = r.odds_updated ?? r.runner_odds_updated ?? '';
+  const main = dec || frac || '-';
+  const detail = [frac && dec ? frac : '', book, upd ? `updated ${upd}` : ''].filter(Boolean).join(' · ');
+  return `<span class="price-pill compact-price">Odds ${escapeHtml(main)}</span>${detail ? `<span class="price-detail" title="${escapeHtml(detail)}">${escapeHtml(detail)}</span>` : ''}`;
+}
+function scoreClass(v){
+  const n = Number(v);
+  if(Number.isNaN(n)) return 'score-muted';
+  if(n >= 85) return 'score-good';
+  if(n >= 70) return 'score-mid';
+  return 'score-poor';
+}
+
+function rprDisplay(r){
+  const raw = r.rpr ?? r.avg_rpr ?? r.runner_rpr ?? r.last_rpr ?? null;
+  const t = String(raw ?? '').trim();
+  if(!t || t === '-' || t.toLowerCase() === 'nan' || t.toLowerCase() === 'null'){
+    const hist = Number(r.historical_runs ?? 0);
+    return hist > 0 ? 'No RPR' : 'Debut';
+  }
+  return escapeHtml(t);
+}
+function runnerContextLabel(r){
+  const hist = Number(r.historical_runs ?? 0);
+  const conf = String(r.confidence ?? '').trim();
+  const form = String(r.horse_form_note ?? r.context_note ?? '').trim();
+  const draw = String(r.draw_note ?? '').trim();
+  if(form && form.toLowerCase() !== 'limited evidence') return form;
+  if(hist === 0 || !hist) return 'Debut / limited evidence';
+  if(draw && draw.toLowerCase() !== 'neutral / limited evidence') return draw;
+  if(conf) return `Confidence ${conf}`;
+  return `${hist} historical runs`;
+}
+function drawFitLabel(r){
+  const txt = String(r.draw_note ?? '').toLowerCase();
+  if(txt.includes('strong')) return 'Positive';
+  if(txt.includes('weak')) return 'Negative';
+  return 'Neutral';
+}
+function oddsMain(r){
+  const dec = r.odds_decimal ?? r.runner_odds_decimal ?? '';
+  const frac = r.odds_fractional ?? r.runner_odds_fractional ?? '';
+  return dec || frac || '-';
+}
+function shortText(v, fallback='-'){
+  const t = String(v ?? '').trim();
+  return t && t.toLowerCase() !== 'null' && t.toLowerCase() !== 'nan' ? t : fallback;
+}
+function countPill(x){ return `<span class="mini-pill"><b>${escapeHtml(x.label)}</b> ${escapeHtml(x.count)} (${escapeHtml(x.pct)}%)</span>`; }
+function pctText(v){ const n=Number(v); return Number.isNaN(n) ? '-' : `${Math.round(n)}%`; }
+function raceMarketLeader(race){
+  const priced = (race.runners || []).map(r => ({...r, _odds:Number(r.odds_decimal)})).filter(r => !Number.isNaN(r._odds));
+  if(!priced.length) return null;
+  priced.sort((a,b)=>a._odds-b._odds);
+  return priced[0];
+}
+function bestXpRunner(race){
+  const xs = (race.runners || []).map(r => ({...r, _xp:Number(r.xp ?? r.score)})).filter(r => !Number.isNaN(r._xp));
+  xs.sort((a,b)=>b._xp-a._xp);
+  return xs[0] || (race.runners || [])[0];
+}
+function setupVerdict(race){
+  const intel = race.race_intelligence || {};
+  const pace = intel.pace_setup || {};
+  if(pace.label) return pace.label;
+  return 'Race shape building';
+}
+function suggestedTop3Text(race){
+  const picks = (race.suggested_1_2_3 || []).slice(0,3);
+  if(!picks.length) return '';
+  return picks.map((p, i) => `${posLabel(i)} ${p.horse || '-'}`).join(' · ');
+}
+function drawBarsHtml(intel){
+  const buckets = intel?.draw_bias?.winning_draws || [];
+  if(!buckets.length) return '<div class="muted small">No draw chart yet</div>';
+  const max = Math.max(...buckets.map(x=>Number(x.pct)||0), 1);
+  return `<div class="mini-bars">${buckets.map(x=>{
+    const pct=Number(x.pct)||0;
+    const h=Math.max(14, Math.round((pct/max)*62));
+    const cls = pct>=35?'bar-good':pct>=20?'bar-mid':'bar-poor';
+    return `<div><i class="${cls}" style="height:${h}px"></i><span>${escapeHtml(x.label)}</span></div>`;
+  }).join('')}</div>`;
+}
+
+function posLabel(i){ return i === 0 ? '1st' : i === 1 ? '2nd' : '3rd'; }
+function runnerNumberKey(v){ const text = String(v ?? '').trim().toUpperCase(); const m = text.match(/\d+/); return m ? [0, Number(m[0])] : [1, text]; }
+function byRunnerNumber(a,b){ const ak = runnerNumberKey(a.number), bk = runnerNumberKey(b.number); if(ak[0] !== bk[0]) return ak[0]-bk[0]; if(ak[1] !== bk[1]) return ak[1] < bk[1] ? -1 : 1; return String(a.horse || '').localeCompare(String(b.horse || '')); }
+function cleanId(v){ return String(v ?? '').replace(/[^a-zA-Z0-9_-]/g, '_'); }
+function raceKey(course, race, i){ return `${cleanId(course)}_${cleanId(race.time)}_${i}`; }
+
+
+function money(v){ const n = Number(v || 0); return n ? '£' + n.toLocaleString(undefined, {maximumFractionDigits: 0}) : '-'; }
+function rate(v){ return v === null || v === undefined ? '-' : `${escapeHtml(v)}%`; }
+function xpBreakdownHtml(b){
+  if(!b || !b.parts) return '<div class="muted">No XP breakdown available.</div>';
+  return `<div class="xp-breakdown"><div class="xp-total">XP ${escapeHtml(b.total ?? '-')}</div>${b.parts.map(p => `<div class="xp-line"><span>${escapeHtml(p.label)}</span><strong>${Number(p.value || 0) >= 0 ? '+' : ''}${escapeHtml(p.value)}</strong></div>`).join('')}</div>`;
+}
+function lineChart(points, valueKey, label){
+  if(!points || !points.length) return `<div class="muted">No ${escapeHtml(label)} data yet.</div>`;
+  const prepared = points.map((p, i) => ({...p, _v:Number(p[valueKey]), _i:i})).filter(p => !Number.isNaN(p._v));
+  if(!prepared.length) return `<div class="muted">No ${escapeHtml(label)} data yet.</div>`;
+  const width = 560, height = 180, pad = 28;
+  const vals = prepared.map(p => p._v);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const range = Math.max(1, max-min);
+  const x = i => pad + (prepared.length === 1 ? (width-pad*2)/2 : i * ((width-pad*2)/(prepared.length-1)));
+  const y = v => height - pad - ((v-min)/range)*(height-pad*2);
+  const line = prepared.map((p,i) => `${i?'L':'M'} ${x(i).toFixed(1)} ${y(p._v).toFixed(1)}`).join(' ');
+  return `<div class="chart-card"><div class="chart-title">${escapeHtml(label)}</div><svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(label)} chart"><path class="chart-grid" d="M ${pad} ${pad} H ${width-pad} M ${pad} ${height-pad} H ${width-pad}"/><path class="chart-line" d="${line}"/>${prepared.map((p,i)=>`<circle class="chart-dot" cx="${x(i)}" cy="${y(p._v)}" r="4"><title>${escapeHtml(p.date)} ${escapeHtml(p.course || '')} ${escapeHtml(label)} ${escapeHtml(p._v)}</title></circle>`).join('')}<text x="${pad}" y="18" class="chart-label">${max}</text><text x="${pad}" y="${height-6}" class="chart-label">${min}</text></svg><div class="muted small">Left to right shows older to newer runs.</div></div>`;
+}
+function ratingChart(points){
+  if(!points || !points.length) return '<div class="muted">No rating movement stored yet.</div>';
+  return lineChart(points, 'rpr', 'RPR rating movement');
+}
+async function openHorseProfile(horseId, horseName){
+  horseModal.classList.remove('hidden');
+  horseProfileContent.innerHTML = '<div class="card">Loading horse profile...</div>';
+  const qs = horseId ? `horse_id=${encodeURIComponent(horseId)}` : `horse=${encodeURIComponent(horseName || '')}`;
+  try {
+    const response = await fetch('/api/horse?' + qs);
+    if(!response.ok) throw new Error(`Horse API failed: ${response.status}`);
+    const data = await response.json();
+    renderHorseProfile(data, qs);
+  } catch (err) {
+    horseProfileContent.innerHTML = `<div class="card"><h3>Horse profile could not load</h3><p class="muted">${escapeHtml(err.message || 'Unknown error')}</p><p class="muted">Try running the Admin update/rebuild, then refresh this page.</p></div>`;
+  }
+}
+function closeHorseProfile(){ horseModal.classList.add('hidden'); }
+
+function xpHistoryChart(points){
+  if(!points || !points.length) return '<div class="muted">No XP history yet.</div>';
+  return lineChart(points, 'xp', 'XP history');
+}
+function statBlock(label, value){ return `<div class="stat"><span>${label}</span><strong>${escapeHtml(value ?? '-')}</strong></div>`; }
+function performanceChart(items, labelKey, title='Performance profile'){
+  if(!items || !items.length) return '<div class="muted">No record yet.</div>';
+  const rows = items.map(x => {
+    const label = x[labelKey] ?? x.label ?? x.course ?? x.going ?? x.distance ?? '-';
+    const runs = Number(x.runs || 0);
+    const wins = Number(x.wins || 0);
+    const places = Number(x.places || 0);
+    const avgRpr = x.avg_rpr ?? x.average_rpr ?? null;
+    const winRate = runs ? Math.round((wins / runs) * 100) : 0;
+    const placeRate = runs ? Math.round((places / runs) * 100) : 0;
+    const score = Math.max(winRate, placeRate);
+    return { label, runs, wins, places, avgRpr, winRate, placeRate, score };
+  }).filter(r => r.runs > 0);
+  if(!rows.length) return '<div class="muted">No record yet.</div>';
+  rows.sort((a,b) => (b.placeRate - a.placeRate) || (b.wins - a.wins) || (b.runs - a.runs));
+  const maxRuns = Math.max(1, ...rows.map(r => r.runs));
+  return `<div class="perf-chart-card">
+    <div class="perf-chart-head"><span>${escapeHtml(title)}</span><strong>${rows.length} profiles</strong></div>
+    <div class="perf-chart-rows">
+      ${rows.slice(0,12).map(r => {
+        const runWidth = Math.max(6, Math.round((r.runs / maxRuns) * 100));
+        const placeWidth = Math.max(4, r.placeRate);
+        return `<div class="perf-row">
+          <div class="perf-label"><strong>${escapeHtml(r.label)}</strong><span>${r.runs} ${r.runs===1?'run':'runs'}</span></div>
+          <div class="perf-bars">
+            <div class="perf-bar-line"><span>Place</span><div class="perf-track"><b class="place" style="width:${placeWidth}%"></b></div><em>${r.placeRate}%</em></div>
+            <div class="perf-bar-line"><span>Sample</span><div class="perf-track"><b class="sample" style="width:${runWidth}%"></b></div><em>${r.runs}</em></div>
+          </div>
+          <div class="perf-stats"><b>${r.wins}</b>W <b>${r.places}</b>P${r.avgRpr!==null && r.avgRpr!==undefined ? ` · avg RPR <b>${escapeHtml(r.avgRpr)}</b>` : ''}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="muted small">Bars show place rate and sample size. Small samples should be treated carefully.</div>
+  </div>`;
+}
+function simpleBars(items, labelKey){
+  return performanceChart(items, labelKey, 'Performance profile');
+}
+function renderHorseProfile(data, qs){
+  if(!data.found){ horseProfileContent.innerHTML = `<div class="card">${escapeHtml(data.message || 'No data found.')}</div>`; return; }
+  const s = data.summary || {};
+  const latestFuture = (data.future_entries || [])[0];
+  horseProfileContent.innerHTML = `
+    <div class="horse-head">
+      ${silk(data.silk_url)}
+      <div><h2>${escapeHtml(data.horse)}</h2><div class="muted">${escapeHtml(s.age ?? '-')}yo ${escapeHtml(s.sex ?? '')} ${s.trainer ? ' · ' + escapeHtml(s.trainer) : ''}</div><a class="full-profile-link" href="/horse.html?${qs}" target="_blank">Open full horse page</a></div>
+    </div>
+    ${data.data_warning ? `<div class="warning-box">${escapeHtml(data.data_warning)}</div>` : ''}
+    <div class="stat-grid">
+      ${statBlock('Runs', s.runs)}
+      ${statBlock('Wins', s.wins)}
+      ${statBlock('Places', s.places)}
+      ${statBlock('Prize money', money(s.prize_money))}
+      ${statBlock('Strike rate', rate(s.strike_rate))}
+      ${statBlock('Placing rate', rate(s.placing_rate))}
+      ${statBlock('Best RPR', s.best_rpr)}
+      ${statBlock('Latest RPR', s.latest_rpr)}
+      ${statBlock('Avg RPR last 3', s.avg_rpr_last3)}
+      ${statBlock('Avg RPR last 5', s.avg_rpr_last5)}
+      ${statBlock('RPR trend', s.rpr_trend)}
+      ${statBlock('Last run', s.last_run_date)}
+    </div>
+    ${latestFuture ? `<section class="profile-section"><h3>XP for selected/future race</h3>${xpBreakdownHtml(latestFuture.xp_breakdown)}</section>` : ''}
+    <section class="profile-section"><h3>Rating movement</h3>${ratingChart(data.rating_movement)}</section>
+    <section class="profile-section"><h3>XP history</h3>${xpHistoryChart(data.xp_history)}</section>
+    <section class="profile-section"><h3>Horse details</h3><div class="info-list"><div><span>Owner</span><b>${escapeHtml(s.owner ?? '-')}</b></div><div><span>Sire</span><b>${escapeHtml(s.sire ?? '-')}</b></div><div><span>Dam</span><b>${escapeHtml(s.dam ?? '-')}</b></div><div><span>Damsire</span><b>${escapeHtml(s.damsire ?? '-')}</b></div></div></section>
+    <section class="profile-section"><h3>Course record</h3>${simpleBars(data.course_record, 'course')}</section>
+    <section class="profile-section"><h3>Going record</h3>${simpleBars(data.going_record, 'going')}</section>
+    <section class="profile-section"><h3>Distance record</h3>${simpleBars(data.distance_record, 'distance')}</section>
+    <section class="profile-section"><h3>Recent runs</h3><div class="run-list">${(data.recent_runs || []).map(r => `<div class="run-card"><div><strong>${escapeHtml(r.date)} · ${escapeHtml(r.course)} · ${escapeHtml(r.position)}</strong><div>${escapeHtml(r.race_name || '')}</div><div class="muted">SP ${escapeHtml(r.sp ?? '-')} · RPR ${escapeHtml(r.rpr ?? '-')} · OR ${escapeHtml(r.or ?? '-')} · Beaten ${escapeHtml(r.beaten_distance ?? '-')}</div>${r.comment ? `<div class="comment">${escapeHtml(r.comment)}</div>` : ''}</div>${xp(r.xp)}</div>`).join('') || '<div class="muted">No previous result runs stored yet.</div>'}</div></section>
+  `;
+}
+horseModalClose.onclick = closeHorseProfile;
+horseModalBackdrop.onclick = closeHorseProfile;
+
+function renderRaceSummaryButton(courseName, race, i, kind){
+  const key = raceKey(courseName, race, i);
+  const isOpen = state.openRace === key;
+  const top = kind === 'racecards'
+    ? (race.suggested_1_2_3 || []).slice(0,3).map((p, i) => `${posLabel(i)} ${p.horse || '-'}`).join(' · ')
+    : (race.result_review?.top_3 || []).slice(0,3).map((p, i) => `${posLabel(i)} ${p.horse || '-'}`).join(' · ');
+  return `
+    <button class="race-row ${isOpen ? 'open' : ''}" data-race-key="${escapeHtml(key)}" type="button">
+      <div class="race-row-time">${escapeHtml(race.time || '--:--')}</div>
+      <div class="race-row-main">
+        <div class="race-row-title">${escapeHtml(race.race_name || 'Race')}</div>
+        <div class="race-row-meta">${escapeHtml(race.distance || '')}${race.going ? ' · ' + escapeHtml(race.going) : ''}${race.field_size ? ' · Field: ' + escapeHtml(race.field_size) : ''}</div>
+        ${top ? `<div class="race-row-top3">${escapeHtml(top)}</div>` : ''}
+      </div>
+      <div class="chevron">${isOpen ? '−' : '+'}</div>
+    </button>`;
+}
+
+
+function countPill(item){
+  if(!item) return '';
+  return `<span class="mini-pill"><b>${escapeHtml(item.label)}</b> ${escapeHtml(item.count)} (${escapeHtml(item.pct)}%)</span>`;
+}
+function raceIntelligenceHtml(race){
+  const intel = race.race_intelligence;
+  if(!intel) return '';
+  const sample = intel.sample || {};
+  const courseBias = intel.course_bias || {};
+  const drawBias = intel.draw_bias || {};
+  const pace = intel.pace_setup || {};
+  const profile = intel.winning_profile || {};
+  const connections = intel.top_course_connections || {};
+  return `
+    <section class="race-intel-panel">
+      <div class="race-intel-head">
+        <div>
+          <h3>Race Intelligence</h3>
+          <p>${escapeHtml(sample.note || 'Built from historical results for this course and similar setup.')}</p>
+        </div>
+        <div class="confidence-badge">Data confidence: ${escapeHtml(sample.confidence || 'Building')}</div>
+      </div>
+      <div class="intel-grid">
+        <div class="intel-card">
+          <span>Historical sample</span>
+          <strong>${escapeHtml(sample.races || 0)} races</strong>
+          <p>${escapeHtml(sample.runners || 0)} runners analysed</p>
+        </div>
+        <div class="intel-card">
+          <span>Course / pace bias</span>
+          <strong>${escapeHtml(courseBias.headline || 'Building')}</strong>
+          <div class="pill-row">${(courseBias.winning_run_styles || []).map(countPill).join('')}</div>
+        </div>
+        <div class="intel-card">
+          <span>Draw bias</span>
+          <strong>${escapeHtml(drawBias.headline || 'No clear draw edge')}</strong>
+          <div class="pill-row">${(drawBias.winning_draws || []).map(countPill).join('')}</div>
+        </div>
+        <div class="intel-card">
+          <span>Today’s pace setup</span>
+          <strong>${escapeHtml(pace.label || 'Pace unclear')}</strong>
+          <p>${escapeHtml(pace.note || '')}</p>
+        </div>
+      </div>
+      <div class="intel-subgrid">
+        <div class="intel-mini">
+          <span>Typical winner</span>
+          <b>Avg RPR ${escapeHtml(profile.avg_winning_rpr ?? '-')} · Avg OR ${escapeHtml(profile.avg_winning_or ?? '-')} · Avg SP ${escapeHtml(profile.avg_winning_sp ?? '-')}</b>
+        </div>
+        <div class="intel-mini">
+          <span>Top course trainers</span>
+          <b>${(connections.trainers || []).slice(0,3).map(x => `${escapeHtml(x.label)} (${escapeHtml(x.count)})`).join(' · ') || 'Building'}</b>
+        </div>
+        <div class="intel-mini">
+          <span>Top course jockeys</span>
+          <b>${(connections.jockeys || []).slice(0,3).map(x => `${escapeHtml(x.label)} (${escapeHtml(x.count)})`).join(' · ') || 'Building'}</b>
+        </div>
+      </div>
+    </section>`;
+}
+
+function renderRacecardDetails(race){
+  const intel = race.race_intelligence || {};
+  const sample = intel.sample || {};
+  const courseBias = intel.course_bias || {};
+  const drawBias = intel.draw_bias || {};
+  const pace = intel.pace_setup || {};
+  const profile = intel.winning_profile || {};
+  const connections = intel.top_course_connections || {};
+  const selected = bestXpRunner(race) || {};
+  const marketLeader = raceMarketLeader(race);
+  const runners = (race.runners || []).slice().sort(byRunnerNumber);
+  const selectedPrice = priceHtml(selected);
+  const marketXp = marketLeader ? (marketLeader.xp ?? marketLeader.score ?? '-') : '-';
+  const marketOdds = marketLeader ? (marketLeader.odds_decimal ?? marketLeader.odds_fractional ?? '-') : '-';
+  return `
+    <article class="race detail-panel dashboard-detail">
+      <section class="dash-header">
+        <div>
+          <div class="dash-course">${escapeHtml(race.time || '')}</div>
+          <h2>${escapeHtml(race.race_name || 'Race')}</h2>
+          <p>${escapeHtml(race.distance || '-')} · ${escapeHtml(race.going || '-')} · Field: ${escapeHtml(race.field_size || runners.length || '-')}</p>
+        </div>
+        <div class="pace-verdict">
+          <span>PACE VERDICT</span>
+          <strong>${escapeHtml(setupVerdict(race))}</strong>
+          <em>${escapeHtml(pace.note || 'Race setup inferred from available racecard and historical context.')}</em>
+        </div>
+      </section>
+
+      <section class="cockpit-grid">
+        <aside class="left-rail-panel">
+          <div class="intel-block">
+            <span class="panel-label">Draw Bias</span>
+            <h3>${escapeHtml(drawBias.headline || 'Draw angle building')}</h3>
+            ${drawBarsHtml(intel)}
+          </div>
+          <div class="intel-block">
+            <span class="panel-label">Pace Bias</span>
+            <h3>${escapeHtml(courseBias.headline || 'Pace angle building')}</h3>
+            <div class="pill-row">${(courseBias.winning_run_styles || []).map(countPill).join('') || '<span class="mini-pill">sample building</span>'}</div>
+          </div>
+          <div class="intel-block">
+            <span class="panel-label">Typical Winner</span>
+            <h3>Avg RPR ${escapeHtml(profile.avg_winning_rpr ?? '-')}</h3>
+            <p>Avg OR ${escapeHtml(profile.avg_winning_or ?? '-')} · Avg SP ${escapeHtml(profile.avg_winning_sp ?? '-')}</p>
+          </div>
+          <div class="intel-block">
+            <span class="panel-label">Data Set</span>
+            <h3>${escapeHtml(sample.races ?? '-')} races</h3>
+            <p>${escapeHtml(sample.runners ?? '-')} runners analysed · Confidence ${escapeHtml(sample.confidence || '-')}</p>
+          </div>
+        </aside>
+
+        <main class="runner-table-panel">
+          <div class="runner-table-head">
+            <h3>The Runners</h3>
+            <span>Contextual performance insights</span>
+          </div>
+          <div class="runner-table-labels">
+            <span>Horse</span><span>Draw</span><span>RPR</span><span>Context</span><span>xP</span><span>Price</span>
+          </div>
+          <div class="premium-runner-table">
+            ${runners.map((r, idx) => {
+              const score = r.xp ?? r.score;
+              const scoreCls = scoreClass(score);
+              const context = runnerContextLabel(r);
+              const drawFit = drawFitLabel(r);
+              return `<button class="premium-runner-row clickable" type="button" data-horse-id="${escapeHtml(r.horse_id || '')}" data-horse-name="${escapeHtml(r.horse || '')}" title="Open ${escapeHtml(r.horse || 'horse')} profile">
+                <div class="runner-horse-cell">
+                  <span class="runner-no">${escapeHtml(r.number || idx + 1)}</span>
+                  ${silk(r.silk_url)}
+                  <div>
+                    <b>${escapeHtml(r.horse)}</b>
+                    <small>${escapeHtml(r.jockey || '')}${r.trainer ? ' · ' + escapeHtml(r.trainer) : ''}</small>
+                  </div>
+                </div>
+                <div class="draw-cell"><b>${escapeHtml(r.draw ?? '-')}</b><small>${drawFit}</small></div>
+                <div class="rpr-cell"><b>${rprDisplay(r)}</b><small>RPR</small></div>
+                <div class="context-cell"><span>${escapeHtml(context)}</span></div>
+                <div class="xp-cell"><span class="xp-ring ${scoreCls}">${escapeHtml(score ?? '-')}</span></div>
+                <div class="price-cell">${priceHtml(r)}</div>
+              </button>`;
+            }).join('')}
+          </div>
+        </main>
+
+        <aside class="right-rail-panel">
+          <div class="side-card key-stat-card">
+            <span>Market Leader</span>
+            <h3>${marketLeader ? escapeHtml(marketLeader.horse) : '-'}</h3>
+            <strong>Odds ${escapeHtml(marketOdds)}</strong>
+            <p>Data score: <b>${escapeHtml(marketXp)}</b></p>
+          </div>
+          <div class="side-card">
+            <span>Top Course Trainers</span>
+            <h3>${(connections.trainers || []).slice(0,2).map(x => `${escapeHtml(x.label)} (${escapeHtml(x.count)})`).join(' · ') || 'Building'}</h3>
+          </div>
+          <div class="side-card">
+            <span>Top Course Jockeys</span>
+            <h3>${(connections.jockeys || []).slice(0,2).map(x => `${escapeHtml(x.label)} (${escapeHtml(x.count)})`).join(' · ') || 'Building'}</h3>
+          </div>
+          <div class="side-card todays-edge">
+            <span>Today's Edge</span>
+            <p>Runner score combines profile evidence, racecard context, draw, ratings and market guide. Prices are shown from the loaded racecard snapshot.</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="selected-runner-panel">
+        <div class="selected-card horse-summary-card">
+          <div class="runner-horse-cell big">${silk(selected.silk_url)}<div><h2>${escapeHtml(selected.horse || 'Selected runner')}</h2><small>${escapeHtml(selected.trainer || '')} · ${escapeHtml(selected.jockey || '')}</small></div></div>
+          <div class="career-stats"><span>Draw <b>${escapeHtml(selected.draw ?? '-')}</b></span><span>RPR <b>${rprDisplay(selected)}</b></span><span>${selectedPrice}</span></div>
+          <button class="button primary selected-open-profile clickable" type="button" data-horse-id="${escapeHtml(selected.horse_id || '')}" data-horse-name="${escapeHtml(selected.horse || '')}">Open horse profile</button>
+        </div>
+        <div class="selected-card">
+          <h3>Context Breakdown</h3>
+          ${xpBreakdownHtml(selected.xp_breakdown)}
+        </div>
+        <div class="selected-card">
+          <h3>Race-Fit Notes</h3>
+          <ul class="clean-list"><li>${escapeHtml(setupVerdict(race))}</li><li>${escapeHtml(drawBias.headline || 'Draw angle building')}</li><li>Data confidence: ${escapeHtml(sample.confidence || 'Building')}</li></ul>
+        </div>
+      </section>
+
+      <section class="confidence-footer">
+        <b>Confidence Rating</b><span>${escapeHtml(sample.confidence || 'Building')}</span><span>Data set: ${escapeHtml(sample.races ?? '-')} similar races · ${escapeHtml(sample.runners ?? '-')} runners</span><span>Odds displayed from racecard import</span>
+      </section>
+    </article>`;
+}
+
+function runnerLineItem(r, label=''){
+  if(!r) return '';
+  const horse = r.horse || '-';
+  const pos = r.position || label || '-';
+  const score = r.run_score ?? r.xp ?? '-';
+  return `<button class="story-runner-card clickable" type="button" data-horse-id="${escapeHtml(r.horse_id || '')}" data-horse-name="${escapeHtml(horse)}">
+    <div class="story-runner-left">
+      <span class="story-position">${escapeHtml(pos)}</span>
+      ${silk(r.silk_url)}
+      <div>
+        <strong>${escapeHtml(horse)}</strong>
+        <small>${escapeHtml(r.jockey || '')}${r.trainer ? ' · ' + escapeHtml(r.trainer) : ''}</small>
+      </div>
+    </div>
+    <div class="story-runner-metrics">
+      ${xp(score)}
+      <span>SP ${escapeHtml(r.sp ?? '-')}</span>
+      <span>RPR ${escapeHtml(r.rpr ?? '-')}</span>
+      ${r.beaten_distance !== undefined ? `<span>Beaten ${escapeHtml(r.beaten_distance)}</span>` : ''}
+    </div>
+  </button>`;
+}
+
+function raceFlowHtml(story, race){
+  const bullets = story.bullets || [];
+  const pace = story.pace_clues || [];
+  const top = race.result_review?.top_3 || [];
+  const winner = top[0]?.horse || 'Winner';
+  const second = top[1]?.horse || 'Second';
+  const third = top[2]?.horse || 'Third';
+  const early = bullets[0] || `${winner} settled into position as the race developed.`;
+  const mid = bullets[1] || pace.slice(0,2).join(' · ') || 'Race shape developed through the middle section.';
+  const late = bullets[2] || `${winner} made the decisive move late.`;
+  const finish = story.headline || race.result_review?.summary || `${winner} came out on top.`;
+  const stages = [
+    ['Break', early],
+    ['Early pace', mid],
+    ['Final 2f', late],
+    ['Finish', finish]
+  ];
+  return `<div class="race-flow">
+    ${stages.map((s,i)=>`<div class="flow-step">
+      <div class="flow-dot">${i+1}</div>
+      <div>
+        <h4>${escapeHtml(s[0])}</h4>
+        <p>${escapeHtml(s[1])}</p>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function paceMapHtml(story){
+  const clues = story.pace_clues || [];
+  const leaders = clues.filter(x => /led|prominent|made|raced prominently|front/i.test(x));
+  const midfield = clues.filter(x => /in touch|tracked|midfield|headway/i.test(x));
+  const hold = clues.filter(x => /rear|held up|slow|dwelt|not clear/i.test(x));
+  const groups = [
+    ['Lead / Prominent', leaders.length || 1, leaders.slice(0,4)],
+    ['Midfield / Tracking', midfield.length || 1, midfield.slice(0,4)],
+    ['Held up / Late', hold.length || 1, hold.slice(0,4)]
+  ];
+  const max = Math.max(...groups.map(g=>g[1]),1);
+  return `<div class="pace-map">
+    ${groups.map(([label,count,items])=>`<div class="pace-map-row">
+      <div class="pace-map-label">${escapeHtml(label)}</div>
+      <div class="pace-map-track"><b style="width:${Math.max(12, Math.round((count/max)*100))}%"></b></div>
+      <div class="pace-map-note">${items.length ? items.map(escapeHtml).join(' · ') : 'Limited clues'}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function raceVerdictHtml(story, race){
+  const review = race.result_review || {};
+  const winner = review.top_3?.[0];
+  const dp = story.data_points || [];
+  const time = dp.find(x => /time/i.test(x.label || ''))?.value || '-';
+  const margin = dp.find(x => /margin/i.test(x.label || ''))?.value || '-';
+  const field = dp.find(x => /field/i.test(x.label || ''))?.value || race.field_size || '-';
+  const quality = Number(winner?.run_score ?? winner?.xp ?? 0);
+  const label = quality >= 80 ? 'Strong winning performance' : quality >= 60 ? 'Solid winning performance' : 'Form needs caution';
+  const cls = quality >= 80 ? 'verdict-good' : quality >= 60 ? 'verdict-mid' : 'verdict-low';
+  return `<div class="race-verdict-card ${cls}">
+    <div>
+      <span>Race Verdict</span>
+      <h3>${escapeHtml(label)}</h3>
+      <p>${escapeHtml(story.headline || review.summary || 'Race story generated from result comments and available data.')}</p>
+    </div>
+    <div class="verdict-metrics">
+      <div><b>${escapeHtml(field)}</b><small>Field</small></div>
+      <div><b>${escapeHtml(margin)}</b><small>Margin</small></div>
+      <div><b>${escapeHtml(time)}</b><small>Time</small></div>
+    </div>
+  </div>`;
+}
+
+function resultStoryHtml(race){
+  const story = race.result_review?.story || {};
+  const dataPoints = story.data_points || [];
+  const bullets = story.bullets || [];
+  const pace = story.pace_clues || [];
+  const incidents = story.incidents || [];
+  const key = story.key_runners || [];
+  const top = race.result_review?.top_3 || [];
+  const winner = top[0] || key[0] || {};
+  const second = top[1] || key[1] || {};
+  const third = top[2] || key[2] || {};
+  const trackerCandidates = key.filter(r => Number(r.run_score ?? r.xp ?? 0) >= 50).slice(0,3);
+
+  return `
+    <section class="race-story-premium">
+      ${raceVerdictHtml(story, race)}
+
+      <div class="story-top-grid">
+        <div class="story-main-card">
+          <div class="story-section-head">
+            <span>Race Reconstruction</span>
+            <h3>How the race unfolded</h3>
+          </div>
+          ${raceFlowHtml(story, race)}
+        </div>
+
+        <div class="story-main-card">
+          <div class="story-section-head">
+            <span>Tactical Shape</span>
+            <h3>Pace / run-style map</h3>
+          </div>
+          ${paceMapHtml(story)}
+        </div>
+      </div>
+
+      <div class="story-spotlight-grid">
+        <div class="story-spotlight winner">
+          <span>Run of the Race</span>
+          <h3>${escapeHtml(winner.horse || '-')}</h3>
+          <p>${escapeHtml(winner.comment || story.headline || 'Best performance based on result score and race context.')}</p>
+          <div class="spotlight-metrics">${xp(winner.run_score ?? winner.xp)} <small>SP ${escapeHtml(winner.sp ?? '-')}</small></div>
+        </div>
+        <div class="story-spotlight">
+          <span>Chaser</span>
+          <h3>${escapeHtml(second.horse || '-')}</h3>
+          <p>${escapeHtml(second.comment || 'Next best performance from the result.')}</p>
+          <div class="spotlight-metrics">${xp(second.run_score ?? second.xp)} <small>SP ${escapeHtml(second.sp ?? '-')}</small></div>
+        </div>
+        <div class="story-spotlight">
+          <span>Stayed On / Tracker</span>
+          <h3>${escapeHtml(third.horse || trackerCandidates[0]?.horse || '-')}</h3>
+          <p>${escapeHtml(third.comment || trackerCandidates[0]?.comment || 'Potential next-time-out note if supported by comments.')}</p>
+          <div class="spotlight-metrics">${xp(third.run_score ?? third.xp ?? trackerCandidates[0]?.run_score)} <small>SP ${escapeHtml(third.sp ?? trackerCandidates[0]?.sp ?? '-')}</small></div>
+        </div>
+      </div>
+
+      <div class="story-detail-grid">
+        <div class="story-main-card">
+          <div class="story-section-head">
+            <span>Key Runners</span>
+            <h3>Performance cards</h3>
+          </div>
+          <div class="story-runner-list">
+            ${(key.length ? key : top).slice(0,6).map((r,i)=>runnerLineItem(r, r.position || i+1)).join('') || '<div class="muted">No key runners available.</div>'}
+          </div>
+        </div>
+
+        <div class="story-main-card">
+          <div class="story-section-head">
+            <span>Clues & Incidents</span>
+            <h3>What to take forward</h3>
+          </div>
+          <div class="story-chip-wrap">
+            ${pace.slice(0,10).map(p=>`<span class="story-chip">${escapeHtml(p)}</span>`).join('') || '<span class="story-chip">Pace clues building</span>'}
+          </div>
+          ${incidents.length ? `<div class="incident-list">${incidents.slice(0,5).map(i=>`<div class="incident-item"><b>${escapeHtml(i.horse || '')}</b><p>${escapeHtml(i.note || '')}</p></div>`).join('')}</div>` : '<div class="muted story-note">No major incidents identified from the comments.</div>'}
+        </div>
+      </div>
+
+      <details class="story-raw-details">
+        <summary>Expand full raw race notes</summary>
+        <div class="story-raw-body">
+          <h4>What happened</h4>
+          <ul>${bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('') || '<li>No bullet summary available.</li>'}</ul>
+          <h4>Data points</h4>
+          <div class="story-stat-grid">
+            ${dataPoints.map(x => `<div class="story-stat"><span>${escapeHtml(x.label)}</span><strong>${escapeHtml(x.value ?? '-')}</strong></div>`).join('')}
+          </div>
+        </div>
+      </details>
+    </section>`;
+}
+function renderResultDetails(race){
+  return `
+    <article class="race detail-panel result-detail-premium">
+      ${resultStoryHtml(race)}
+
+      <section class="result-podium-section">
+        <div class="story-section-head">
+          <span>Result</span>
+          <h3>Result 1-2-3</h3>
+        </div>
+        <div class="podium premium-podium">
+          ${(race.result_review?.top_3 || []).map((p, i) => `
+            <button class="pick clickable rank-${i+1}" type="button" data-horse-id="${escapeHtml(p.horse_id || '')}" data-horse-name="${escapeHtml(p.horse || '')}">
+              ${silk(p.silk_url)}
+              <div>
+                <strong>${posLabel(i)}</strong>
+                <div class="name">${escapeHtml(p.horse)}</div>
+                <div class="sub">${escapeHtml(p.jockey || '')}</div>
+                <div class="data-row">${xp(p.run_score ?? p.xp)} <span>SP ${escapeHtml(p.sp ?? '-')}</span></div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="full-result-section">
+        <div class="story-section-head">
+          <span>Full Field</span>
+          <h3>Full Result XP</h3>
+        </div>
+        <div class="runners result-runner-grid">
+          ${(race.runners || []).map(r => `
+            <button class="runner clickable" type="button" data-horse-id="${escapeHtml(r.horse_id || '')}" data-horse-name="${escapeHtml(r.horse || '')}">
+              <div class="rank-num">${escapeHtml(r.position || '-')}</div>
+              ${silk(r.silk_url)}
+              <div class="runner-main">
+                <div class="name">${escapeHtml(r.horse)}</div>
+                <div class="sub">${escapeHtml(r.jockey || '')} ${r.trainer ? ' · ' + escapeHtml(r.trainer) : ''}</div>
+                <div class="data-row">${xp(r.run_score ?? r.xp)} <span>SP ${escapeHtml(r.sp ?? '-')}</span> <span>RPR ${escapeHtml(r.rpr ?? '-')}</span> <span>Beaten ${escapeHtml(r.beaten_distance ?? '-')}</span></div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </section>
+    </article>`;
+}
+function renderAccordion(data, kind){
+  if(!data.courses?.length){
+    content.innerHTML = `<div class="card">No ${kind === 'racecards' ? 'racecards' : 'results'} have been loaded yet. Go to Admin, upload a CSV, then click Run Daily Update.</div>`;
+    return;
+  }
+  if(!state.openCourse) state.openCourse = data.courses[0]?.course || null;
+  content.innerHTML = data.courses.map((course, ci) => {
+    const courseOpen = state.openCourse === course.course;
+    const raceCount = course.races?.length || 0;
+    return `
+      <section class="course accordion-course">
+        <button class="course-toggle" data-course="${escapeHtml(course.course)}" type="button">
+          <div>
+            <h2>${escapeHtml(course.course)}</h2>
+            <div class="course-sub">${raceCount} race${raceCount === 1 ? '' : 's'} · click to ${courseOpen ? 'hide' : 'show'}</div>
+          </div>
+          <div class="chevron large">${courseOpen ? '−' : '+'}</div>
+        </button>
+        ${courseOpen ? `<div class="race-list">
+          ${(course.races || []).map((race, i) => {
+            const key = raceKey(course.course, race, i);
+            return `<div class="race-accordion-item">
+              ${renderRaceSummaryButton(course.course, race, i, kind)}
+              ${state.openRace === key ? (kind === 'racecards' ? renderRacecardDetails(race) : renderResultDetails(race)) : ''}
+            </div>`;
+          }).join('')}
+        </div>` : ''}
+      </section>`;
+  }).join('');
+
+  document.querySelectorAll('.course-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const c = btn.dataset.course;
+      state.openCourse = state.openCourse === c ? null : c;
+      state.openRace = null;
+      kind === 'racecards' ? renderRacecards(data) : renderResults(data);
+    });
+  });
+  document.querySelectorAll('.race-row').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = btn.dataset.raceKey;
+      state.openRace = state.openRace === r ? null : r;
+      kind === 'racecards' ? renderRacecards(data) : renderResults(data);
+    });
+  });
+  document.querySelectorAll('.runner.clickable, .pick.clickable, .premium-runner-row.clickable').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openHorseProfile(btn.dataset.horseId, btn.dataset.horseName);
+    });
+  });
+}
+
+function renderRacecards(data){
+  state.mode = 'racecards';
+  title.textContent = `Racecards${data.date ? ' - ' + data.date : ''}`;
+  intro.textContent = 'Courses are grouped below. Open a course, then tap a race to see the data suggested 1st, 2nd and 3rd plus the full runner list.';
+  renderAccordion(data, 'racecards');
+}
+
+function renderResults(data){
+  state.mode = 'results';
+  title.textContent = `Results Review${data.date ? ' - ' + data.date : ''}`;
+  intro.textContent = 'Courses are grouped below. Open a course, then tap a race to see how it was won and each horse Run Score / XP.';
+  renderAccordion(data, 'results');
+}
+
+async function loadRacecards(){
+  state.openCourse = null; state.openRace = null;
+  btnRacecards.classList.add('active'); btnResults.classList.remove('active');
+  const data = await fetch('/api/racecards').then(r => r.json());
+  renderRacecards(data);
+}
+async function loadResults(){
+  state.openCourse = null; state.openRace = null;
+  btnResults.classList.add('active'); btnRacecards.classList.remove('active');
+  const data = await fetch('/api/results').then(r => r.json());
+  renderResults(data);
+}
+btnRacecards.onclick = loadRacecards;
+btnResults.onclick = loadResults;
+loadRacecards();
+</script>
+</body>
+</html>
